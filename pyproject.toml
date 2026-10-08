@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "video-transcriber"
+version = "0.1.0"
+description = "Transcribe local MP4 video and audio files using the Gemini Pro API"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Developer" }
+]
+dependencies = [
+    "google-genai>=1.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+video-transcriber = "video_transcriber.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
