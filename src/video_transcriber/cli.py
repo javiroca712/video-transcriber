@@ -10,7 +10,7 @@ from .transcriber import VideoTranscriber, TranscriptionError
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="video-transcriber",
-        description="Transcribe local MP4 video/audio files using the Google Gemini API.",
+        description="Transcribe local MP4 video/audio files using Google Gemini API or local Whisper.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
@@ -22,11 +22,19 @@ def create_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "-e",
+        "--engine",
+        choices=["gemini", "local"],
+        default=None,
+        help="Transcription engine to use: 'gemini' (cloud) or 'local' (offline faster-whisper)",
+    )
+
+    parser.add_argument(
         "-m",
         "--model",
         type=str,
         default=None,
-        help="Gemini model to use (default: GEMINI_MODEL env var or 'gemini-2.5-flash', or use 'gemini-2.5-pro')",
+        help="Model to use. For Gemini: 'gemini-3.5-flash', etc. For local: 'tiny', 'base', 'small', 'medium', 'large-v3'",
     )
 
     parser.add_argument(
@@ -43,6 +51,20 @@ def create_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("output"),
         help="Directory where transcription files will be saved",
+    )
+
+    parser.add_argument(
+        "--device",
+        choices=["auto", "cpu", "cuda"],
+        default="auto",
+        help="Device for local processing ('auto', 'cpu', 'cuda')",
+    )
+
+    parser.add_argument(
+        "--compute-type",
+        choices=["auto", "int8", "float16", "float32"],
+        default="auto",
+        help="Quantization/compute type for local Whisper ('auto', 'int8', 'float16', 'float32')",
     )
 
     parser.add_argument(
@@ -70,7 +92,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--prompt",
         type=str,
         default=None,
-        help="Additional custom instructions for the transcription prompt",
+        help="Additional custom instructions for the transcription prompt (Gemini only)",
     )
 
     parser.add_argument(
@@ -105,13 +127,17 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         config = Config(api_key=args.api_key, output_dir=args.output_dir)
-        config.validate()
+        engine_name = args.engine or config.default_engine
+        config.validate(engine=engine_name)
     except ValueError as err:
-        print(f"[!] Error: {err}", file=sys.stderr)
+        print(f"[!] Configuration error: {err}", file=sys.stderr)
         return 1
 
     try:
-        transcriber = VideoTranscriber(config=config)
+        transcriber = VideoTranscriber(config=config, engine=engine_name)
+    except ImportError as err:
+        print(f"[!] Dependency error: {err}", file=sys.stderr)
+        return 1
     except Exception as exc:
         print(f"[!] Initialization error: {exc}", file=sys.stderr)
         return 1
@@ -120,8 +146,10 @@ def main(argv: list[str] | None = None) -> int:
     success_count = 0
     total_files = len(args.files)
 
+    print(f"[i] Using transcription engine: '{engine_name.upper()}'")
+
     for idx, file_path in enumerate(args.files, 1):
-        print(f"\n[{idx}/{total_files}] Processing: {file_path}")
+        print(f"\n[{idx}/{total_files}] Processing: {file_path.name}")
 
         if args.skip_existing:
             stem = file_path.stem
@@ -144,6 +172,8 @@ def main(argv: list[str] | None = None) -> int:
                 custom_instructions=args.prompt,
                 keep_remote_file=args.keep_file,
                 progress_callback=log_progress,
+                device=args.device,
+                compute_type=args.compute_type,
             )
 
             result.duration_seconds = round(time.time() - start_time, 2)
@@ -157,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
 
         except FileNotFoundError as err:
             print(f"[!] File error: {err}", file=sys.stderr)
+        except ImportError as err:
+            print(f"[!] Dependency error: {err}", file=sys.stderr)
         except TranscriptionError as err:
             print(f"[!] Transcription failed: {err}", file=sys.stderr)
         except Exception as err:

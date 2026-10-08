@@ -1,19 +1,20 @@
-# Video Transcriber (Gemini Pro API)
+# Video Transcriber (Cloud & Local)
 
-A Python tool to transcribe local MP4 (and other audio/video) files using the Google Gemini API.
+A modern, modular Python tool to transcribe local MP4 (and other audio/video) files using either the **Google Gemini API** (cloud multimodal) or **faster-whisper** (100% offline, local).
 
-Built with the official Google GenAI SDK (`google-genai`), this tool leverages Gemini's native multimodal understanding and File API to deliver high-accuracy transcriptions with speaker identification, timestamps, and multi-format exports.
+Built with a pluggable engine architecture, this tool lets you seamlessly switch between cloud processing (with Gemini's multimodal speaker diarization and visual grounding) and private local processing (with quantized Whisper on CPU/GPU).
 
 ---
 
 ## Features
 
-- 🎥 **Native Video & Audio Support**: Handles `.mp4`, `.mov`, `.mkv`, `.webm`, `.wav`, `.mp3`, and `.m4a`.
-- 🧠 **Gemini Models**: Works with `gemini-2.5-pro`, `gemini-2.5-flash`, and earlier models.
-- ⏱️ **Timestamps & Speaker Diarization**: Automatically tags speakers (`Speaker 1:`, `Speaker 2:`) and marks timestamps (`[01:23]`).
-- 📝 **Multiple Output Formats**: Export to `.txt`, `.srt` (SubRip subtitles), `.md` (Markdown), and `.json` (structured metadata), or `--format all`.
-- 🧹 **Automatic Cleanup**: Uploads files using Gemini File API and automatically deletes them after processing to save storage quota and protect privacy.
-- ⚡ **Batch Processing**: Transcribe multiple videos in a single command.
+- 🔄 **Dual Engine Architecture**: Switch effortlessly between cloud (`gemini`) and offline local (`local` via faster-whisper).
+- 🎥 **Native Video Container Support**: Ingests `.mp4`, `.mov`, `.mkv`, `.webm`, `.wav`, `.mp3`, and `.m4a`.
+- 🧠 **Gemini Multimodal (Cloud)**: Leverages Gemini 3.5 Flash / Pro with native speaker diarization and automated transient retry on server demand spikes.
+- ⚡ **Local Whisper (Offline)**: Runs CTranslate2-accelerated Whisper with `int8` quantization on CPU or `float16` on CUDA with built-in Voice Activity Detection (VAD).
+- ⏱️ **Timestamps**: Timestamp markers (`[00:15]`) formatted cleanly for human review and downstream LLM prompting.
+- 📝 **Multi-Format Exports**: Save to `.md` (Markdown, recommended for LLMs), `.json` (structured metadata), `.srt` (SubRip subtitles), and `.txt` (plain text), or `--format all`.
+- 🛡️ **Resilient Batch Processing**: `--skip-existing` avoids re-transcribing completed files, with automatic retry and cooldown between batch jobs.
 
 ---
 
@@ -21,37 +22,41 @@ Built with the official Google GenAI SDK (`google-genai`), this tool leverages G
 
 ```
 video-transcriber/
-├── .venv/                      # Virtual environment
+├── .venv/                          # Virtual environment
 ├── src/
 │   └── video_transcriber/
-│       ├── __init__.py         # Package exports
-│       ├── __main__.py         # python -m video_transcriber entry point
-│       ├── cli.py              # CLI argument parsing and runner
-│       ├── config.py           # Configuration and environment management
-│       ├── formatters.py       # Exporters (txt, srt, md, json)
-│       └── transcriber.py      # Core Gemini File API & generation engine
+│       ├── __init__.py             # Exports Config, VideoTranscriber, engines, formatters
+│       ├── __main__.py             # python -m video_transcriber entry point
+│       ├── cli.py                  # CLI argument parser & batch runner
+│       ├── config.py               # Configuration and environment management
+│       ├── formatters.py           # Exporters (txt, srt, md, json)
+│       ├── transcriber.py          # Unified VideoTranscriber facade
+│       └── engines/
+│           ├── __init__.py         # Engine exports
+│           ├── base.py             # BaseTranscriberEngine interface
+│           ├── factory.py          # Dynamic engine factory
+│           ├── gemini.py           # Cloud Gemini API engine
+│           └── local_whisper.py    # Local faster-whisper engine
 ├── tests/
 │   ├── __init__.py
-│   └── test_transcriber.py     # Unit tests
-├── .env.example                # Template for environment variables
-├── .gitignore                  # Git ignore rules for media, venv, secrets
-├── pyproject.toml              # Modern Python packaging & dependencies
-├── requirements.txt            # Pinned requirements
-└── README.md                   # Documentation
+│   └── test_transcriber.py         # Unit tests
+├── .env.example                    # Template for environment variables
+├── .gitignore                      # Git ignore rules for media, venv, secrets, output
+├── pyproject.toml                  # Modern Python packaging & dependencies
+├── requirements.txt                # Pinned requirements
+└── README.md                       # Documentation
 ```
 
 ---
 
-## Quickstart
+## Installation & Setup
 
-### 1. Activate the Virtual Environment
+### 1. Virtual Environment Activation
 
 **Windows (PowerShell):**
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
-
-*(If execution policy blocks scripts, run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`)*
 
 **Windows (Command Prompt):**
 ```cmd
@@ -63,101 +68,92 @@ video-transcriber/
 source .venv/bin/activate
 ```
 
----
-
-### 2. Configure Your Gemini API Key
-
-1. Get your API key from [Google AI Studio](https://aistudio.google.com/apikey).
-2. Copy `.env.example` to `.env`:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-3. Open `.env` and set your key:
-```env
-GEMINI_API_KEY=AIzaSy...
-GEMINI_MODEL=gemini-2.5-flash
-```
-
-*(You can also set the model to `gemini-2.5-pro` for higher reasoning or complex multi-speaker audio).*
+### 2. Dependencies
+- **Cloud Gemini only**: `pip install -e .`
+- **Cloud + Local Whisper**: `pip install -e .[local]`
 
 ---
 
-### 3. Usage via CLI
+## Usage
 
-#### Basic Transcription (saves to `./output/<filename>.txt`)
+### 1. Cloud Transcription (Gemini)
+Requires `GEMINI_API_KEY` in `.env` or passed via `--api-key`:
+
 ```bash
-video-transcriber path/to/my_video.mp4
+# Basic transcription (saves to output/<name>.txt)
+video-transcriber path/to/video.mp4
+
+# Export all formats (.md, .json, .srt, .txt) using Gemini
+video-transcriber path/to/video.mp4 --engine gemini --format all
 ```
 
-#### Generate SubRip Subtitles (`.srt`)
+### 2. Local Offline Transcription (faster-whisper)
+Requires **zero** API keys or internet connection:
+
 ```bash
-video-transcriber my_video.mp4 --format srt
+# Transcribe locally on CPU (default model: small)
+video-transcriber path/to/video.mp4 --engine local
+
+# Transcribe with ultra-fast tiny model
+video-transcriber path/to/video.mp4 --engine local --model tiny --format md
+
+# Transcribe with larger model on GPU (if CUDA available)
+video-transcriber path/to/video.mp4 --engine local --model medium --device cuda
 ```
 
-#### Use Gemini 2.5 Pro with All Output Formats
+### 3. Batch Processing with Auto-Skip
 ```bash
-video-transcriber my_video.mp4 --model gemini-2.5-pro --format all
+# Transcribe all mp4 videos in a directory, skipping existing transcripts
+video-transcriber videos/*.mp4 --skip-existing --format all
 ```
 
-#### Transcribe Multiple Files
-```bash
-video-transcriber video1.mp4 video2.mp4 -o transcripts/
-```
+---
 
-#### Specify Language or Custom Prompt
-```bash
-video-transcriber lecture.mp4 -l "Spanish" -p "Include a bulleted summary of main topics at the top."
-```
+## CLI Options Reference
 
-#### CLI Options Reference
 | Flag | Description | Default |
 |---|---|---|
 | `files` | One or more input media files | *(Required)* |
-| `-m`, `--model` | Model name (`gemini-2.5-pro`, `gemini-2.5-flash`) | From `.env` or `gemini-2.5-flash` |
+| `-e`, `--engine` | Engine choice: `gemini` (cloud) or `local` (whisper) | `gemini` |
+| `-m`, `--model` | Model name (Gemini: `gemini-3.5-flash`; Local: `tiny`, `base`, `small`, `medium`, `large-v3`) | Engine default |
 | `-f`, `--format` | Output format: `txt`, `srt`, `md`, `json`, `all` | `txt` |
 | `-o`, `--output-dir` | Directory to save output files | `output` |
+| `--device` | Local execution device: `auto`, `cpu`, `cuda` | `auto` |
+| `--compute-type` | Local quantization: `auto`, `int8`, `float16`, `float32` | `auto` |
+| `--skip-existing` | Skip files that already have transcripts saved | `False` |
 | `--no-timestamps` | Turn off timestamp markers | `False` |
-| `--no-speakers` | Turn off speaker identification | `False` |
-| `-l`, `--language` | Language hint (e.g. `English`, `German`) | Auto-detect |
+| `--no-speakers` | Turn off speaker identification (Gemini) | `False` |
+| `-l`, `--language` | Language hint (e.g. `English`, `Spanish`) | Auto-detect |
 | `-p`, `--prompt` | Extra prompt instructions for Gemini | `None` |
 | `--keep-file` | Keep remote file on Gemini Files API | `False` (auto-deleted) |
-| `--api-key` | API key override | Uses `GEMINI_API_KEY` |
+| `--api-key` | Gemini API key override | Uses `GEMINI_API_KEY` |
 
 ---
 
-### 4. Python API Usage
-
-You can also import and use `VideoTranscriber` directly in your own Python scripts:
+## Python API Usage
 
 ```python
-from video_transcriber import VideoTranscriber, Config
+from video_transcriber import VideoTranscriber
 
-# Initialize transcriber (reads GEMINI_API_KEY from .env)
-transcriber = VideoTranscriber()
+# 1. Cloud Gemini
+gemini_transcriber = VideoTranscriber(engine="gemini")
+result = gemini_transcriber.transcribe("video.mp4", format_type="md")
+result.save("output", format_type="md")
 
-# Transcribe video
-result = transcriber.transcribe(
-    file_path="presentation.mp4",
-    model="gemini-2.5-pro",
-    include_timestamps=True,
-    identify_speakers=True,
+# 2. Local Whisper
+local_transcriber = VideoTranscriber(engine="local")
+result_local = local_transcriber.transcribe(
+    "video.mp4",
+    model="small",
+    device="cpu",
     target_format="md",
 )
-
-# Access text directly
-print(result.raw_text)
-
-# Save to file
-result.save("output", format_type="md")
+result_local.save("output", format_type="md")
 ```
 
 ---
 
 ## Running Tests
-
-Run the test suite using unittest:
 
 ```bash
 python -m unittest discover tests
