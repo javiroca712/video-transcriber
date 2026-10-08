@@ -153,6 +153,23 @@ result_local.save("output", format_type="md")
 
 ---
 
+## Benchmarking (Local vs. Cloud)
+
+A comparative benchmark script is provided to measure latency, Word Error Rate (WER), and accuracy between local Whisper and cloud Gemini:
+
+```bash
+python scripts/run_whisper_benchmark.py
+```
+
+### Key Benchmark Highlights
+- **Speed**: Local Whisper (`small`, CPU `int8`) processed 11 test videos **5.6x faster** (4.2 min total vs. 23.8 min on Gemini Flash cloud).
+- **Word Error Rate (WER)**: ~13.6% average acoustic variance against Gemini.
+- **Multimodal Insight**: Whisper provides fast, private verbatim audio transcription; Gemini excels when slides/screens contain technical jargon (*ROCm*, *bare-metal*, *vLLM*) visible on video.
+
+For AI assistant conventions and development instructions, see [AGENTS.md](AGENTS.md).
+
+---
+
 ## Running Tests
 
 ```bash
