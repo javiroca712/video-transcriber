@@ -80,6 +80,12 @@ def create_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Skip files that already have existing transcripts in the output directory",
+    )
+
+    parser.add_argument(
         "--api-key",
         type=str,
         default=None,
@@ -116,6 +122,15 @@ def main(argv: list[str] | None = None) -> int:
 
     for idx, file_path in enumerate(args.files, 1):
         print(f"\n[{idx}/{total_files}] Processing: {file_path}")
+
+        if args.skip_existing:
+            stem = file_path.stem
+            all_exist = all((config.output_dir / f"{stem}.{fmt}").exists() for fmt in formats_to_save)
+            if all_exist:
+                print(f"[i] Output already exists for '{file_path.name}'. Skipping.")
+                success_count += 1
+                continue
+
         start_time = time.time()
 
         try:
@@ -146,6 +161,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[!] Transcription failed: {err}", file=sys.stderr)
         except Exception as err:
             print(f"[!] Unexpected error processing {file_path}: {err}", file=sys.stderr)
+
+        if idx < total_files:
+            time.sleep(3)
 
     print(f"\nFinished: {success_count}/{total_files} files transcribed successfully.")
     return 0 if success_count == total_files else 1
