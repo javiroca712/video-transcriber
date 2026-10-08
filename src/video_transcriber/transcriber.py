@@ -163,20 +163,66 @@ class VideoTranscriber:
                 custom_instructions=custom_instructions,
             )
 
-            if progress_callback:
-                progress_callback(f"Requesting transcription with model '{model_name}'...")
-
-            response = self.client.models.generate_content(
-                model=model_name,
-                contents=[uploaded_file, prompt],
+            prompt = self._build_transcription_prompt(
+                include_timestamps=include_timestamps,
+                identify_speakers=identify_speakers,
+                target_format=target_format,
+                language=language,
+                custom_instructions=custom_instructions,
             )
 
-            transcript_text = response.text or ""
+            candidate_models = [model_name]
+            for fallback in ["gemini-3.5-flash", "gemini-3-flash-preview", "gemini-flash-latest"]:
+                if fallback not in candidate_models:
+                    candidate_models.append(fallback)
+
+            max_retries = 3
+            retry_delay = 4.0
+            response = None
+            last_err = None
+            selected_model = model_name
+
+            for candidate in candidate_models:
+                selected_model = candidate
+                model_succeeded = False
+                for attempt in range(1, max_retries + 1):
+                    try:
+                        if progress_callback:
+                            progress_callback(f"Requesting transcription with '{candidate}' (attempt {attempt}/{max_retries})...")
+
+                        response = self.client.models.generate_content(
+                            model=candidate,
+                            contents=[uploaded_file, prompt],
+                        )
+                        if response and response.text:
+                            model_succeeded = True
+                            break
+                    except Exception as err:
+                        last_err = err
+                        err_str = str(err)
+                        is_transient = "503" in err_str or "429" in err_str or "UNAVAILABLE" in err_str or "demand" in err_str
+                        if is_transient and attempt < max_retries:
+                            if progress_callback:
+                                progress_callback(f"Temporary server demand spike (503/429). Retrying in {retry_delay:.0f}s...")
+                            time.sleep(retry_delay)
+                            retry_delay *= 1.5
+                        else:
+                            break
+
+                if model_succeeded:
+                    break
+                elif progress_callback and len(candidate_models) > 1:
+                    progress_callback(f"Model '{candidate}' unavailable. Trying alternative model...")
+
+            if response is None or not response.text:
+                raise TranscriptionError(f"All candidate models failed. Last error: {last_err}")
+
+            transcript_text = response.text
 
             return TranscriptionResult(
                 raw_text=transcript_text,
                 source_file=path,
-                model=model_name,
+                model=selected_model,
                 timestamps_included=include_timestamps,
                 speakers_identified=identify_speakers,
             )

@@ -18,7 +18,7 @@ class TestVideoTranscriber(unittest.TestCase):
         config = Config(api_key="test-api-key")
         config.validate()
         self.assertEqual(config.api_key, "test-api-key")
-        self.assertEqual(config.default_model, "gemini-2.5-flash")
+        self.assertEqual(config.default_model, "gemini-3.5-flash")
 
     def test_cli_parser(self):
         parser = create_parser()

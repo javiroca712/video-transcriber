@@ -32,13 +32,14 @@ class TranscriptionResult:
             output_path: Target file path or directory.
             format_type: One of 'txt', 'md', 'json', 'srt'.
         """
-        if output_path.is_dir():
+        # If output_path is an existing directory or has no file extension, treat as folder
+        if output_path.is_dir() or not output_path.suffix:
+            output_path.mkdir(parents=True, exist_ok=True)
             stem = self.source_file.stem
             target = output_path / f"{stem}.{format_type}"
         else:
             target = output_path
-
-        target.parent.mkdir(parents=True, exist_ok=True)
+            target.parent.mkdir(parents=True, exist_ok=True)
 
         if format_type == "json":
             content = json.dumps(self.to_dict(), indent=2, ensure_ascii=False)

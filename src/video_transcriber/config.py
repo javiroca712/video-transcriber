@@ -12,7 +12,7 @@ class Config:
     """Application configuration."""
 
     api_key: str | None = None
-    default_model: str = "gemini-2.5-flash"
+    default_model: str = "gemini-3.5-flash"
     output_dir: Path = Path("output")
 
     def __post_init__(self) -> None:

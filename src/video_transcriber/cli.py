@@ -138,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"[+] Saved {fmt.upper()} to: {saved_path}")
 
             success_count += 1
-            print(f"[✔] Completed in {result.duration_seconds}s")
+            print(f"[OK] Completed in {result.duration_seconds}s")
 
         except FileNotFoundError as err:
             print(f"[!] File error: {err}", file=sys.stderr)
