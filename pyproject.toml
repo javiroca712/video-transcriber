@@ -4,12 +4,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "video-transcriber"
-version = "0.1.0"
-description = "Transcribe local MP4 video and audio files using the Gemini Pro API"
+version = "0.2.0"
+description = "Transcribe local video and audio files using Google Gemini API or local offline Whisper"
 readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
 authors = [
     { name = "Developer" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
 ]
 dependencies = [
     "google-genai>=1.0.0",

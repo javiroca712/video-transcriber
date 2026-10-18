@@ -83,6 +83,26 @@ class TestVideoTranscriber(unittest.TestCase):
             self.assertIn("# Transcription: test_video.mp4", content)
             self.assertIn("Markdown test transcript", content)
 
+    def test_clean_text_and_wer_calculation(self):
+        from scripts.run_whisper_benchmark import clean_text_for_comparison, calculate_wer
+
+        gemini_sample = "# Transcription\n**[00:15]** Here is a transcription: Hello world this is a test"
+        whisper_sample = "[00:15] Hello world this is another test"
+
+        clean_g = clean_text_for_comparison(gemini_sample)
+        clean_w = clean_text_for_comparison(whisper_sample)
+
+        self.assertEqual(clean_g, "hello world this is a test")
+        self.assertEqual(clean_w, "hello world this is another test")
+
+        ref = clean_g.split()
+        hyp = clean_w.split()
+        wer = calculate_wer(ref, hyp)
+        self.assertGreater(wer, 0.0)
+        self.assertLess(wer, 1.0)
+        self.assertEqual(calculate_wer(ref, ref), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
+
